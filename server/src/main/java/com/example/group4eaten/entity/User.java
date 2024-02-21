@@ -8,6 +8,8 @@ import lombok.*;
 @ToString
 @Entity
 @Getter
+@Setter
+@Table(name="TB_USER")
 public class User {
     @Id
     @Column(name = "userId")
@@ -19,19 +21,4 @@ public class User {
     @Column
     String nickname;
 
-    public String getPassword() {
-        return this.password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public void setUserId(String userId) {
-        this.userId = userId;
-    }
-
-    public String getId() {
-        return userId;
-    }
 }

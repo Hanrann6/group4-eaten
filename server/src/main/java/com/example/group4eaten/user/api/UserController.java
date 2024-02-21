@@ -2,30 +2,27 @@ package com.example.group4eaten.user.api;
 
 import com.example.group4eaten.entity.User;
 import com.example.group4eaten.user.dto.UserForm;
-import com.example.group4eaten.user.repository.UserRepository;
 import com.example.group4eaten.user.service.UserService;
 import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
+import java.util.Map;
+
 @Slf4j
 @RestController
+@CrossOrigin(origins = {"http://localhost:80", "http://43.202.63.5","https://eaten-ecc.site/", "http://219.254.47.198:80", "https://eaten-five.vercel.app/"})
 public class UserController {
-    @Autowired
-    UserRepository userRepository;
 
     @Autowired
     UserService userService;
-
-   /* @GetMapping("/signup")
-    public String signUpPage() {
-        return "user/new";
-    }*/
 
     @GetMapping("/api/hello")
     public String hello() {
@@ -33,95 +30,121 @@ public class UserController {
     }
 
     @PostMapping("/user/create") //회원가입
-    public String createUser(@RequestBody UserForm userForm) {
-        log.info(userForm.toString());
+    public ResponseEntity<Map<String, Object>> createUser(@RequestBody UserForm userForm) throws NoSuchAlgorithmException {
+        Map<String, Object> response = new HashMap<>();
 
-        User user = userForm.toEntity();
-        log.info(user.toString());
-
-        User saved = userRepository.save(user);
-        log.info(saved.toString());
-
-        return "";
+        try {
+            userService.registerUser(userForm);
+            response.put("msg", "회원가입이 완료되었습니다.");
+            response.put("statusCode", 200);
+            return new ResponseEntity<>(response, HttpStatus.OK);
+        } catch (Exception e) {
+            // 예외가 발생한 경우
+            response.put("msg", "회원가입 중 오류가 발생했습니다.");
+            response.put("statusCode", 500);
+            return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
-    @GetMapping("/userId/exists") //아이디 중복 확인
-    public ResponseEntity<Boolean> checkUserIdDuplicate(@RequestHeader("userId") String userId) {
-        boolean isDuplicate = userService.checkUserIdDuplicate(userId);
-        return ResponseEntity.ok(isDuplicate);
-    }
+    @GetMapping("/userId/exists") //아이디 중복 체크
+    public ResponseEntity<Map<String, Object>> userIdDuplicate(@RequestHeader("userId") String userId) {
+        Map<String, Object> response = new HashMap<>();
 
-    /*@GetMapping("/user/login") // 로그인 화면 리턴
-    public String loginForm() {
-        return "";
-    }*/
+        if (userService.isDuplicateUserId(userId)) {
+            log.error("아이디가 이미 존재합니다.");
+            response.put("msg", "이미 사용중인 아이디입니다.");
+            response.put("statusCode", 400);
+            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        }
+        else {
+            log.info("사용 가능한 아이디입니다.");
+            response.put("msg", "사용 가능한 아이디입니다.");
+            response.put("statusCode", 200);
+            return new ResponseEntity<>(response, HttpStatus.OK);
+        }
+
+    }
 
     @PostMapping("/user/login") //로그인
-    public String login(@RequestParam String userId, @RequestParam String password, HttpSession session) {
-        if (userService.login(userId, password)) {
-            session.setAttribute("userId", userId); // 세션에 사용자 ID 저장
-            return  ""; //성공 시 이동할 페이지의 이름 또는 경로
-        } else {
-            //로그인 실패
-            return ""; //실패 시 다시 로그인 화면으로 이동
+    public ResponseEntity<Map<String, Object>> login(@RequestBody UserForm userForm, HttpSession session) throws NoSuchAlgorithmException {
+        Map<String, Object> response = new HashMap<>();
+
+        User user = userForm.toEntity();
+
+        try {
+            if (userService.login(userForm)) {
+                session.setAttribute("userId", user.getUserId()); // 세션에 사용자 ID 저장
+                response.put("msg", "로그인이 완료되었습니다.");
+                response.put("statusCode", 200);
+                response.put("userId", user.getUserId());
+                response.put("nickname", userService.getNickname(user.getUserId()));
+                return new ResponseEntity<>(response, HttpStatus.OK);
+            } else {
+                response.put("msg", "로그인에 실패했습니다. 아이디 또는 비밀번호를 확인해주세요.");
+                response.put("statusCode", 401);
+                return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
+            }
+        } catch (Exception e) {
+            response.put("msg", "로그인 중 오류가 발생했습니다.");
+            response.put("statusCode", 500);
+            return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
     @GetMapping("/user/logout") //로그아웃
-    public String logout(HttpSession session) {
-        // 세션에서 사용자 정보 제거
-        session.removeAttribute("userId");
-
-        // 로그아웃 후 로그인 화면으로 이동하도록 설정
-        return "";
+    public ResponseEntity<String> logout(HttpSession session) {
+        // 세션 무효화
+        session.invalidate();
+        return new ResponseEntity<>("로그아웃 성공", HttpStatus.OK);
     }
 
-    @GetMapping("/user/{userId}/edit") //닉네임 수정 페이지 연결
-    public String edit(@RequestHeader("userId") String userId, Model model) {
-        User userEntity = userRepository.findById(userId).orElse(null);
-        model.addAttribute("user", userEntity);
-        return "";
-    }
+    @PutMapping("/user/{userId}/edit")
+    public ResponseEntity<Map<String, Object>> update(@PathVariable String userId, @RequestBody UserForm userForm, HttpSession session) {
+        Map<String, Object> response = new HashMap<>();
 
-    @PostMapping("/user/{userId}/edit") //닉네임 수정 결과 POST
-    public String update(@RequestHeader("userId") String userId, @RequestBody UserForm form) {
-        log.info(form.toString());
-        User userEntity = form.toEntity();
-        User target = userRepository.findById(userEntity.getId()).orElse(null);
-        if (target != null) {
-            userRepository.save(userEntity);
+        String nickname = userForm.getNickname();
+        // 세션에서 현재 로그인한 사용자의 ID
+        String loggedInUserId = (String) session.getAttribute("userId");
+
+        if (loggedInUserId != null && loggedInUserId.equals(userId)) {
+            // 세션에 로그인한 사용자 ID가 있는 경우에만 업데이트를 허용
+            boolean updateResult = userService.updateUser(userId, nickname);
+
+            if (updateResult) {
+                response.put("msg", "닉네임이 수정되었습니다.");
+                response.put("statusCode", 200);
+                response.put("nickname", nickname);
+                return new ResponseEntity<>(response, HttpStatus.OK);
+            } else {
+                // 닉네임 수정에 실패한 경우
+                response.put("msg", "닉네임 수정 실패.");
+                response.put("statusCode", 500);
+                return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+        } else {
+            // 세션에 로그인한 사용자 ID가 없거나, 로그인한 사용자와 업데이트 대상 사용자가 일치하지 않는 경우
+            response.put("msg", "로그인한 사용자만 업데이트를 수행할 수 있습니다.");
+            response.put("statusCode", 401); // Unauthorized
+            return new ResponseEntity<>(response, HttpStatus.UNAUTHORIZED);
         }
-        return "";
     }
 
-    /*@PutMapping("/user/{userId}/edit")
-    public String update(@PathVariable String userId, @RequestBody UserForm form) {
-        log.info(form.toString());
+    @DeleteMapping("user/{userId}/delete") //회원 삭제
+    public ResponseEntity<Map<String, Object>> delete(@RequestHeader("userId") String userId, RedirectAttributes rttr, Model model) {
+        Map<String, Object> response = new HashMap<>();
 
-        User userEntity = userRepository.findById(userId).orElse(null);
-        if (userEntity != null) {
-            // 수정하고자 하는 정보를 업데이트
-            userEntity.setUsername(form.getUsername());
-
-            // userRepository.save()를 호출하지 않아도 JPA는 영속성 컨텍스트에서 변경을 감지하고 업데이트를 수행합니다.
-        }
-
-        return "";
-    }*/
-
-
-    @GetMapping("user/{userId}/delete") //회원 삭제
-    public String delete(@RequestHeader("userId") String userId, RedirectAttributes rttr, Model model) {
         log.info("삭제 요청이 들어왔습니다!!");
-        //삭제 대상 가져오기
-        User target = userRepository.findById(userId).orElse(null);
-        log.info(target.toString());
-        //대상 삭제
-        if (target != null) {
-            userRepository.delete(target);
+        try {
+            userService.delete(userId);
             rttr.addFlashAttribute("msg", "삭제되었습니다.");
+            response.put("msg", "회원탈퇴가 완료되었습니다.");
+            response.put("statusCode", 200); // Unauthorized
+            return new ResponseEntity<>(response, HttpStatus.OK);
+        } catch (Exception e) {
+            response.put("msg", "회원탈퇴 중 오류가 발생했습니다.");
+            response.put("statusCode", 500);
+            return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
         }
-        return "";
     }
 
 }
