@@ -3,7 +3,6 @@ import { Post } from '../post';
 import { PostList } from './styles';
 import { useEffect, useState } from 'react';
 import { fetchNextPage } from '../../api/post/newPost';
-// { fetchNewPosts } from '../../api/post/newPost';
 
 interface NewPostListProps {
   posts: PostType[]; // props 형식 수정
@@ -45,7 +44,7 @@ export const NewPostList: React.FC<NewPostListProps> = ({ posts: initialPosts })
   return (
     <PostList>
       {posts && posts.length > 0 ? (
-        posts.map(post => <Post key={post.id} post={post} />)
+        posts.map(post => <Post key={post.postId} post={post} />)
       ) : (
         <div>게시글이 없습니다.</div>
       )}
